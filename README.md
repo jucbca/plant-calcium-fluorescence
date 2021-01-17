@@ -1,2 +1,2 @@
 # plant-calcium-fluorescence
-Organize, run statistics, and plot pixel intensity of sets of images acquired via fluorescent microscopy of reporters in plant tissues of single cells.
+Organize, run basic statistics, and plot pixel intensity data of images acquired via fluorescent microscopy of reporters in plant tissues.
