@@ -2,14 +2,25 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 
-
+## images taken in GCaMP7c plants with 
+# excitation filter ET470/40nm
+# emission filter   ET525/50nm
+## ALL IMAGES MUST BE TAKEN IN 160 MAGNIFICATION, 250ms exposure, 25% laser intensity, 
+## TO STANDARIZE SIGNAL INTENSITY AND HAVE PROPER RESOLUTION OF DIFFERENT CELL TYPES. 
                    
-### INSTRUCCIONES   ####   ALL DATA OF COL0 STIMULATED FOR LONG DISTANCE W/ 1mM GLU!!!
 
-# Poner la(s) carpeta completa con imagenes y archivos in,out,both.csv en la carpeta "Analizar". 
-# Por ahora solo poner lo que sea del experimento de Ca1. Es decir, señal a larga distancia y con Glu.
-
-save2ALLtraces = 0
+# info of expriment to be recorded
+fecha = 210709  ## Date
+planta = "Col0" ## line Col0..."Col0-MZ" "Col0-RH-MZ" "Col0-RH-EZ"
+individual = 1 ## 
+reporter = "GCaMP7c" ## GCaMP3 or GCaMP7c??
+AA =  "Glu1"     
+#  "1/2MS"  
+# "Glu1"  
+# ""0.5mM AP5 - Glu1" " 
+# "0.1mM Nif.Acid"
+#  "0.5mM AP5"
+#  "ACC1"
 
 
                      ### ORGANIZE IMAGEJ DATA ###
@@ -27,244 +38,60 @@ spreadTime <- function() {
     intensities = append(intensities, iVector)
     first = both$Y[i]
   }
-  phase$both = intensities
-  intensities = c()
-  for (i in 2:7){
-    iVector = seq(first, inside$Y[i], by = (inside$Y[i]-first)/29)
-    intensities = append(intensities, iVector)
-    first = inside$Y[i]
-  }
-  phase$inside = intensities
-  intensities = c()
-  for (i in 2:7){
-    iVector = seq(first, outside$Y[i], by = (outside$Y[i]-first)/29)
-    intensities = append(intensities, iVector)
-    first = outside$Y[i]
-  }
-  phase$outside = intensities
+  phase$Y = intensities
+  
   return(phase)
 }
 #
-home = "/Users/nauj/Google Drive/LAB-RESULTS/Root CaSignal/Analize"
-setwd(home)
+
+## given wd as the folder analyse, where all the data is placed!
+home = getwd()
+
 list.files()
-ALLtraces = read.csv("ALLtraces.csv")
-ALLtraces = ALLtraces[,2:ncol(ALLtraces)]
-for (folder in list.files()){
-  wd = paste(home,folder, sep = "/")
-  setwd(wd)
-  if (length(grep("no", folder, ignore.case = TRUE))==1){
-    barrier = "No Barrier"
-    barIndex = 0
-  }
-  if (length(grep("no", folder, ignore.case = TRUE))==0){
-    barrier = "Barrier"
-    barIndex = 1
-  }
-  ### put all traces together ###
-  # load data
-  both <- read.csv("both.csv") 
-  inside <- read.csv("in.csv") 
-  outside <- read.csv("out.csv") 
-  
+
+#ALLtraces = c()
+ALLtraces = read.csv("ALLtraces.csv")[,-c(1)] 
+
+
+for (i in list.files()[grep("both", list.files())]){
+    # load data
+  both <- read.csv(i)
+  names(both)[1] = "X"
+  names(both)[2] = "Y"
+  ## adjust data
   BL = spreadTime()
-  traces = data.frame(X = both$X[7:nrow(both)], both = both$Y[7:nrow(both)], 
-                      inside = inside$Y[7:nrow(both)], outside = outside$Y[7:nrow(both)])
-  
-  
+  traces = data.frame(X = both$X[7:nrow(both)], Y = both$Y[7:nrow(both)])
   traces = rbind(BL,traces)
   for(i in 1:nrow(traces)){
     traces$X[i] = i
   }
-  #trazabilidad del experimento
-  traces$date = substring(folder, 1, 6)
-  traces$barrier = barIndex
-  traces$individual = substring(folder, nchar(folder))
+   #trazabilidad
+  traces$Date = fecha
+  traces$Plant = planta
+  traces$individual = individual
+  traces$reporter = reporter
+  traces$AA = AA
+  individual = individual+1
   
-  ### put all traces together DONE ###
+  
   ### plot traces  ###
-  setwd(home)
-  stimulusIndex = 10
-  diff = traces$outside[185] - traces$inside[185]
-  traces$outside = traces$outside-diff
-  traces2plot = gather(traces, "location", "intensity", "inside", "outside" )
+  plot(x = traces$X, y = traces$Y, type = "l")
+  readline (prompt="Press [enter] to save")
   
-  ggplot(traces2plot, aes(x = X, y = intensity, color = location)) +
-    geom_line() +
-    ylab ("525/50nm Pixel Intensity") + 
-    xlab ("Seconds") + 
-    ggtitle(paste("1mM Glu",barrier,sep = " ")) +
-    theme(axis.text.x = element_text(angle = 0, hjust = 0 ),
-          panel.grid.major.y = element_blank(),
-          panel.grid.minor.y = element_blank(),
-          panel.grid.major.x = element_line(),
-          panel.grid.minor.x = element_line())
-  ggsave(paste(wd,"in&out.jpg",sep = "/"))
-  name = paste(barrier, "-traces.csv",sep = "")
-  write.csv(traces ,file = paste(wd,name,sep = "/"))
-  setwd(home)
-  if (save2ALLtraces == 1){
-    ALLtraces = rbind(ALLtraces, traces)
-  }
+  ### add to file with all data
+  ALLtraces = rbind(ALLtraces, traces)
+  
+  
 }
-write.csv(ALLtraces, file = paste(home,"ALLtraces.csv",sep = "/") )    
-rm(list = ls()[-which(ls()=="home")])
+
+head(ALLtraces)
+tail(ALLtraces)
+
+
+write.csv(ALLtraces, file = "ALLtraces.csv" )   
+
 
                 ### END ORGANIZE IMAGEJ DATA ###
 
-
-
-
-  
-
-              #####  STATISTICS WITH ALL TRACES #####
-
-ALLtraces = read.csv("ALLtraces.csv")
-ALLtraces = ALLtraces[,2:ncol(ALLtraces)]
-
-        ## BARRIER ##
-        # mean trace barrier IN
-barrierTracesIn = ALLtraces %>% select(-both, -outside) %>% 
-                  filter(barrier == 1) %>% unite(id, date, individual) %>%
-                  spread(id, inside)
-for(i in 3:ncol(barrierTracesIn)){
-  barrierTracesIn[,i] = barrierTracesIn[,i]-barrierTracesIn[180,i]
-}     
-
-barrierTracesIn = gather(barrierTracesIn, "id", "inside", 3:ncol(barrierTracesIn))                  
-# plot all                 
-ggplot(barrierTracesIn, aes(x = X, y = inside, color = id)) +
-  geom_line() +
-  ylab ("525/50nm Pixel Intensity") + 
-  xlab ("Seconds") + 
-  geom_vline(xintercept = 200)
-
-          # mean trace barrier OUT
-barrierTracesOut = ALLtraces %>% select(-both, -inside) %>% 
-  filter(barrier == 1) %>% unite(id, date, individual) %>%
-  spread(id, outside)
-for(i in 3:ncol(barrierTracesOut)){
-  barrierTracesOut[,i] = barrierTracesOut[,i]-barrierTracesOut[180,i]
-}     
-
-barrierTracesOut = gather(barrierTracesOut, "id", "outside", 3:ncol(barrierTracesOut))                  
-# plot all                 
-ggplot(barrierTracesOut, aes(x = X, y = outside, color = id)) +
-  geom_line() +
-  ylab ("525/50nm Pixel Intensity") + 
-  xlab ("Seconds") + 
-  geom_vline(xintercept = 200)
-
-
-
-# get means for both
-# IN
-barrierMeanIN = barrierTracesIn %>% spread(id, inside) %>% 
-  select(-"200625_1", -"200626_1", -"barrier") 
-barrierMeanIN = data.frame(X = barrierMeanIN$X, mean = rowMeans(barrierMeanIN[,2:ncol(barrierMeanIN)]))
-barrierMeanIN$location = "inside"
-barrierMeanIN = barrierMeanIN[50:nrow(barrierMeanIN),]
-# OUT
-barrierMeanOUT = barrierTracesOut %>% spread(id, outside) %>% 
-  select(-"200625_1", -"200626_1", -"barrier") 
-barrierMeanOUT = data.frame(X = barrierMeanOUT$X, mean = rowMeans(barrierMeanOUT[,2:ncol(barrierMeanOUT)]))
-barrierMeanOUT$location = "outside"
-barrierMeanOUT = barrierMeanOUT[50:nrow(barrierMeanOUT),]
-
-barrierMean = rbind(barrierMeanIN, barrierMeanOUT)
-
-
-# plot mean
-ggplot(barrierMean, aes(x = X, y = mean, color = location)) +
-  geom_line() +
-  ylab ("525/50nm Pixel Intensity") + 
-  xlab ("Seconds") + 
-  geom_vline(xintercept = 190, color = "red")+ 
-  ggtitle("1mM Glu Barrier mean trace") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0 ),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank(),
-        panel.grid.major.x = element_line(),
-        panel.grid.minor.x = element_line())
-ggsave(paste(home,"BarrierMean.jpg",sep = "/"))
-# save barrierMean
-      ### END BARRIER ###
-
-
-
-
-
-
-
-
-
-
-      ### NO BARRIER  ###
-
-# mean trace NO barrier IN
-barrierTracesIn = ALLtraces %>% select(-both, -outside) %>% 
-  filter(barrier == 0) %>% unite(id, date, individual) %>%
-  spread(id, inside)
-for(i in 3:ncol(barrierTracesIn)){
-  barrierTracesIn[,i] = barrierTracesIn[,i]-barrierTracesIn[180,i]
-}     
-
-barrierTracesIn = gather(barrierTracesIn, "id", "inside", 3:ncol(barrierTracesIn))                  
-# plot all                 
-ggplot(barrierTracesIn, aes(x = X, y = inside, color = id)) +
-  geom_line() +
-  ylab ("525/50nm Pixel Intensity") + 
-  xlab ("Seconds") + 
-  geom_vline(xintercept = 200)
-
-# mean trace barrier OUT
-barrierTracesOut = ALLtraces %>% select(-both, -inside) %>% 
-  filter(barrier == 0) %>% unite(id, date, individual) %>%
-  spread(id, outside)
-for(i in 3:ncol(barrierTracesOut)){
-  barrierTracesOut[,i] = barrierTracesOut[,i]-barrierTracesOut[180,i]
-}     
-
-barrierTracesOut = gather(barrierTracesOut, "id", "outside", 3:ncol(barrierTracesOut))                  
-# plot all                 
-ggplot(barrierTracesOut, aes(x = X, y = outside, color = id)) +
-  geom_line() +
-  ylab ("525/50nm Pixel Intensity") + 
-  xlab ("Seconds") + 
-  geom_vline(xintercept = 200)
-
-
-
-# get means for both
-# IN
-barrierMeanIN = barrierTracesIn %>% spread(id, inside) %>% 
-  select( -"barrier") 
-barrierMeanIN = data.frame(X = barrierMeanIN$X, mean = rowMeans(barrierMeanIN[,2:ncol(barrierMeanIN)]))
-barrierMeanIN$location = "inside"
-barrierMeanIN = barrierMeanIN[50:nrow(barrierMeanIN),]
-# OUT
-barrierMeanOUT = barrierTracesOut %>% spread(id, outside) %>% 
-  select(-"barrier") 
-barrierMeanOUT = data.frame(X = barrierMeanOUT$X, mean = rowMeans(barrierMeanOUT[,2:ncol(barrierMeanOUT)]))
-barrierMeanOUT$location = "outside"
-barrierMeanOUT = barrierMeanOUT[50:nrow(barrierMeanOUT),]
-
-barrierMean = rbind(barrierMeanIN, barrierMeanOUT)
-
-
-# plot mean
-ggplot(barrierMean, aes(x = X, y = mean, color = location)) +
-  geom_line() +
-  ylab ("525/50nm Pixel Intensity") + 
-  xlab ("Seconds") + 
-  geom_vline(xintercept = 190, color = "red")+ 
-  ggtitle("1mM Glu Barrier mean trace") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0 ),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank(),
-        panel.grid.major.x = element_line(),
-        panel.grid.minor.x = element_line())
-ggsave(paste(home,"NoBarrierMean.jpg",sep = "/"))
-# save barrierMean
-
+#ALLtraces$AA[which(ALLtraces$Date == 201214 & ALLtraces$AA == "0.1mM Nif.Acid")] = "Glu1"
 
