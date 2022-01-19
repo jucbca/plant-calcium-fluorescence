@@ -31,16 +31,14 @@ halfDecay = c()
 
 for (datei in unique(AllTraces$idate)){
   subSet0 = dplyr::filter(AllTraces, idate == datei) # get only traces for one reporter
-  for(plantZ in unique(subSet0$iNumber)) {
-    subSet1 = dplyr::filter(subSet0, iNumber == plantZ)# get only traces for one individual
-    Plant = subSet1$planta
-    Reporter = subSet1$reporter
+  for(plantid in unique(subSet0$iNumber)) {
+    subSet1 = dplyr::filter(subSet0, iNumber == plantid)# get only traces for one individual
     stimFrame = min(which( round(subSet1$`time(s)`) > 180   ))
-    trace = data.frame( X = subSet1$`time(s)`-subSet1$`time(s)`[stimFrame], Y = subSet1$ratioTrace )  # Para hacer cero el momento del estimulo
+    trace = data.frame( X = subSet1$`time(s)`-subSet1$`time(s)`[stimFrame], Y = subSet1$NormRatio )  # Para hacer cero el momento del estimulo
     
     
     # smooth with Savitzky-Golay filter
-    Vtrace = sgolayfilt(c(trace$Y) - trace$Y[1] , p = 1, n = 9)
+    Vtrace = sgolayfilt( trace$Y , p = 1, n = 9) #c(trace$Y) - trace$Y[1]
 
     # average base line
     bl = mean(Vtrace[1:which(trace$X==0)]) 
@@ -73,15 +71,15 @@ for (datei in unique(AllTraces$idate)){
       abline(h = bl, col = "blue") +
       abline(h = meanMax, col = "blue")
 
-    print(paste(datei,plantZ,maximum,HalfMaxtime,decay, sep = "-"))
-    readline(prompt="Press [enter] to continue:")
+    print(paste(datei,plantid,maximum,HalfMaxtime,decay, sep = "-"))
+    #readline(prompt="Press [enter] to continue:")
 
     
     
     Date = append(Date, datei)
-    id = append( Plant, plantZ)
-    Plant = 
-    Reporter = 
+    id = append( id, plantid)
+    Plant = append(Plant, unique(subSet1$planta))
+    Reporter = append(Reporter, unique(subSet1$reporter))
     peakAmplitude = append(peakAmplitude, maximum)
     HalfMaxTimes = append(HalfMaxTimes, HalfMaxtime)
     halfDecay = append(halfDecay, decay)
@@ -93,7 +91,7 @@ for (datei in unique(AllTraces$idate)){
 
 ## toca guardar con info de la planta. estimulo, linea genetica, reportero de Ca
 
-traceSummary = data.frame(peakAmplitude, HalfMaxTimes, halfDecay, Plant, Date)
+traceSummary = data.frame(Date,id,Plant,Reporter,"Peak(dR/Ro)"=peakAmplitude, "1/2Max(s)"= HalfMaxTimes, "Decay(s)"=halfDecay)
 
 save(AllTraces, traceSummary, file = "RootSWP-MCaMP6.RData")
 write.csv(traceSummary, 'AnalyzedTraces.csv')

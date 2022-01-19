@@ -104,8 +104,15 @@ for ( i in grep(".csv", list.files())){
       print(paste("More than one orange channel for trace ", idate, "-", iNumber, "FIX IT!", sep = ""))
       break
     }
-    ratioTrace = itrace$"Signal-GFP" / itrace$"Signal-Orange"
-    itrace = cbind(itrace, ratioTrace)
+    
+    #calculate ∆R/Ro
+      # average base line
+    blG = mean(itrace$`Signal-GFP`[1]) # first data point GFP
+    blO = mean(itrace$`Signal-Orange`[1]) # first data point Orange
+    Ro = blG/blO # Ratio first data point GFP/Orange
+    NormRatio = (itrace$`Signal-GFP`/itrace$`Signal-Orange`) / Ro # ∆R/Ro
+     
+    itrace = cbind(itrace, NormRatio)
     # plot trace to visualize
     #plot(x = itrace$`time(s)`, y = itrace$`Signal-GFP`)
     plotTrace = itrace
