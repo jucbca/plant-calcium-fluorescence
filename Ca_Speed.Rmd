@@ -1,0 +1,172 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+Analyze the fluorescence intensity of cytosolic Calcium indicator data from Moe-Lange, 2021.
+
+0. Load libraries and functions
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+# Functions
+normalizeToBaseline <- function(trace, bl.time = 90){
+  bl.trace = trace$Y[1:which(abs(trace$X-bl.time) ==  min(abs(trace$X-bl.time ))) ]
+  bl = round(mean(bl.trace,2))
+  trace$Y = trace$Y - bl
+  return(trace)
+  ## Get slope for each trace. 
+}
+calculateslope <- function(vector) {
+  slopetrace = NULL
+  for( i in 2:length(vector)){
+    slopei = vector[i]-vector[i-1]
+    slopetrace = append(slopetrace, slopei)  
+  }
+  slopetrace = append(slopetrace, slopetrace[length(slopetrace)])
+  return(slopetrace)
+}
+```
+
+
+1. Load all the .csv files of the pixel intensity of ROIs in the stacks.
+
+1.1 Setup some data of the experiment.
+```{r}
+fecha = 220629  ## Date
+planta = "Col0" ## line Col0..."Col0-MZ" "Col0-RH-MZ" "Col0-RH-EZ"
+individual = 1 ## 
+reporter = "Atto514" ## GCaMP3 or GCaMP7c??
+AA =  "none"  
+dx = 13 # distance between ROIs in mm
+```
+
+1.2 Load and plot
+input- traces in .csv format with name indicating basipetal (base) or acropetal (acro). and the leaf is necessary separating with "-". Example "base-L13.csv"
+```{r}
+home = getwd()
+list.files()
+Alltraces =c() 
+
+for (i in list.files()[grep(".csv", list.files())] ){
+    # load data
+  trace.i <- read.csv(i)
+  if(length( grep("base",i) ) == 1 ){
+    trace.i$position = "basipetal"
+  } else {
+    trace.i$position = "acropetal"
+  }
+  
+  trace.i$name = strsplit(i,"-")[[1]][1]
+  trace.i$date = fecha
+  trace.i$plant = planta
+  trace.i$reporter = reporter
+  names(trace.i)[1] = "X"
+  names(trace.i)[2] = "Y"
+  if( length(grep("L",i)) != 0 ){
+    trace.i$leaf = strsplit(i,"-")[[1]][3] %>% substr(2,3)
+  }
+  trace.i <- normalizeToBaseline(trace.i)
+  
+  ### plot traces  ###
+  title = paste( trace.i[1,3:ncol(trace.i)], sep = " ", collapse = " " ) 
+  plot(x = trace.i$X, y = trace.i$Y, type = "l", main=title)
+  #readline (prompt="Press [enter] to save")
+  ### add to file with all data
+  Alltraces = rbind(Alltraces, trace.i)
+}
+head(Alltraces)
+tail(Alltraces)
+
+write.csv(Alltraces, file = "Alltraces.csv", row.names = FALSE )    
+```
+
+2. calculate, plot and save slope traces.
+input - Alltraces.csv
+output - datasummary.csv
+```{r}
+# filter for one only trace
+datasummary = c()
+slope = NULL
+for( n in unique(Alltraces$name) ){
+  for( p in unique(Alltraces$position)){
+    trace.i = dplyr::filter(Alltraces, name==n, position==p) 
+    for(l in unique(trace.i$leaf) ){
+      trace.i = dplyr::filter(Alltraces, name==n, position==p, leaf==l) 
+      print(paste(n,p,l))
+      
+      # find slope
+      slope.i = calculateslope( trace.i$Y )
+      slope = append(slope, slope.i)
+      
+      # find time of Peak slope index and time
+      peak.index = which(slope.i==max(slope.i))
+      title = paste( trace.i[1,3:ncol(trace.i)], sep = " ", collapse = " " ) 
+      plot(slope.i, type = "l", main=title )+
+        abline(v = peak.index, col = "red")
+      peak.time = trace.i$X[peak.index]
+      plot(trace.i$X, trace.i$Y, main=title )+
+        abline(v = peak.time, col = "red")
+      datasummary = rbind(datasummary, data.frame( n,  p, l, peak.time, dx) )
+    }
+  }
+} 
+names(datasummary) = c("name","position","leaf","peak.time","dx")
+if ( length(grep("slope", names(Alltraces))) == 0){
+  Alltraces$Yslope1 = slope
+}
+write.csv(datasummary, "datasummary.csv", row.names = FALSE )
+write.csv(Alltraces, file = "Alltraces.csv", row.names = FALSE )
+```
+
+3. Calculate an plot speeds of the Ca wave. Use peak slope for this.
+OPTIONAL! give a different distance to each experiment. Ideally it's always the same!
+```{r}
+datasummary$dx = 0
+datasummary$dx[which(datasummary$name==4)] = 11
+datasummary$dx[which(datasummary$name==6)] = 12
+datasummary$dx[which(datasummary$name==5)] = 7
+```
+
+input - datasummary.csv
+output - plots and datastats.csv
+```{r}
+speed.data = NULL
+for ( n in unique(datasummary$name) ){
+  summary.i = dplyr::filter(datasummary, name==n )
+  for ( l in unique(summary.i$leaf)) {
+    print(paste(n,l,sep = "-"))
+    summary.i = dplyr::filter(datasummary, name==n, leaf==l )
+    trace.i = dplyr::filter(Alltraces, name==n, leaf==l )
+    # find time difference
+    dt = summary.i$peak.time[ which(summary.i$position == "acropetal" ) ] - 
+        summary.i$peak.time[ which(summary.i$position == "basipetal" ) ]
+    # find speed
+    speed = round( summary.i$dx[1]/dt , 2)  # mm/s
+    # save
+    speed.data = rbind( speed.data, 
+                        data.frame("name" = n,
+                                   "leaf" = l,
+                                   "speed" = speed) )
+    # plot
+    plot <- ggplot( trace.i, aes(X, Y, color = position)) +
+      geom_line()  +
+      geom_vline( xintercept  =summary.i$peak.time[ which(summary.i$position == "acropetal" ) ] ) +
+      geom_vline( xintercept = summary.i$peak.time[ which(summary.i$position == "basipetal" ) ]) +
+      ylab ("Pixel Intensity ") + 
+      xlab ("Seconds") + 
+      ggtitle(paste(n,l))
+    print(plot)
+    ggsave(filename =  paste( n," L",l,"_slopePeaks.pdf",sep = "" ), plot)
+  }
+}
+write.csv(speed.data, "speed.data.csv")
+
+ggplot(speed.data, aes("Col-0",speed)) +
+  geom_boxplot() + 
+  geom_jitter()
+ggsave( paste( "speeds.pdf",sep = "" ))
+```
+

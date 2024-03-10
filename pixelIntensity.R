@@ -10,11 +10,11 @@ library(tidyr)
                    
 
 # info of expriment to be recorded
-fecha = 210709  ## Date
+fecha = 210327  ## Date
 planta = "Col0" ## line Col0..."Col0-MZ" "Col0-RH-MZ" "Col0-RH-EZ"
 individual = 1 ## 
-reporter = "GCaMP7c" ## GCaMP3 or GCaMP7c??
-AA =  "Glu1"     
+reporter = "MCaMP6s" ## GCaMP3 or GCaMP7c??
+AA =  "none"     
 #  "1/2MS"  
 # "Glu1"  
 # ""0.5mM AP5 - Glu1" " 
@@ -42,6 +42,13 @@ spreadTime <- function() {
   
   return(phase)
 }
+# normalize to baseline as 0
+normalizeToBaseline <- function(trace, bl.time = 90){
+  bl.trace = trace$Y[1:which(abs(trace$X-bl.time) ==  min(abs(trace$X-bl.time ))) ]
+  bl = round(mean(bl.trace,2))
+  trace$Y = trace$Y - bl
+  return(trace)
+}
 #
 
 ## given wd as the folder analyse, where all the data is placed!
@@ -49,49 +56,107 @@ home = getwd()
 
 list.files()
 
-#ALLtraces = c()
-ALLtraces = read.csv("ALLtraces.csv")[,-c(1)] 
+
+Alltraces =c() # read.csv("ALLtraces.csv")[,-c(1)] 
 
 
-for (i in list.files()[grep("both", list.files())]){
+for (i in list.files()[grep(".csv", list.files())]){
     # load data
-  both <- read.csv(i)
-  names(both)[1] = "X"
-  names(both)[2] = "Y"
-  ## adjust data
-  BL = spreadTime()
-  traces = data.frame(X = both$X[7:nrow(both)], Y = both$Y[7:nrow(both)])
-  traces = rbind(BL,traces)
-  for(i in 1:nrow(traces)){
-    traces$X[i] = i
+  trace.i <- read.csv(i)
+  if(length( grep("base",i) ) == 1 ){
+    trace.i$position = "basipetal"
+  } else {
+    trace.i$position = "acropetal"
   }
-   #trazabilidad
-  traces$Date = fecha
-  traces$Plant = planta
-  traces$individual = individual
-  traces$reporter = reporter
-  traces$AA = AA
-  individual = individual+1
+  trace.i$name = strsplit(i,"-")[[1]][1]
   
+  # names(both)[1] = "X"
+  # names(both)[2] = "Y"
+  ## adjust data
+  #BL = spreadTime()
+  #traces = data.frame(X = both$X[7:nrow(both)], Y = both$Y[7:nrow(both)])
+  #traces = rbind(BL,traces)
+  # for(i in 1:nrow(traces)){
+  #   traces$X[i] = i
+  # }
+   #trazabilidad
+  trace.i$date = fecha
+  trace.i$plant = planta
+  #trace$individual = individual
+  trace.i$reporter = reporter
+  #traces$AA = AA
+  #individual = individual+1
+  trace.i <- normalizeToBaseline(trace.i)
   
   ### plot traces  ###
-  plot(x = traces$X, y = traces$Y, type = "l")
+  plot(x = trace.i$X, y = trace.i$Y, type = "l")
   readline (prompt="Press [enter] to save")
   
   ### add to file with all data
-  ALLtraces = rbind(ALLtraces, traces)
-  
-  
+  Alltraces = rbind(Alltraces, trace.i)
 }
 
-head(ALLtraces)
-tail(ALLtraces)
+head(Alltraces)
+tail(Alltraces)
 
 
-write.csv(ALLtraces, file = "ALLtraces.csv" )   
+write.csv(Alltraces, file = "Alltraces.csv", row.names = FALSE )    #paste(trace.i$name[1],"-Alltraces.csv", sep="")
 
 
                 ### END ORGANIZE IMAGEJ DATA ###
 
-#ALLtraces$AA[which(ALLtraces$Date == 201214 & ALLtraces$AA == "0.1mM Nif.Acid")] = "Glu1"
+
+
+
+
+
+## Get slope for each trace. 
+calculateslope <- function(vector) {
+  slopetrace = NULL
+  for( i in 2:length(vector)){
+    slopei = vector[i]-vector[i-1]
+    slopetrace = append(slopetrace, slopei)  
+  }
+  slopetrace = append(slopetrace, slopetrace[length(slopetrace)])
+  return(slopetrace)
+}
+
+
+# filter for one only trace
+datasummary = c()
+for( n in unique(Alltraces$name) ){
+  for( p in unique(Alltraces$position)){
+    trace.i = dplyr::filter(Alltraces, name==n, position==p) 
+    print(paste(n,p))
+    
+    # find slope
+    slope.i = calculateslope( trace.i$Y )
+    slope = append(slope, slope.i)
+    
+    # find time of Peak slope index and time
+    peak.index = which(slope.i==max(slope.i))
+    plot(slope.i, type = "l")+
+      abline(v = peak.index, col = "red")
+    peak.time = trace.i$X[peak.index]
+    plot(trace.i$X, trace.i$Y )+
+      abline(v = peak.time, col = "red")
+    datasummary = rbind(datasummary, data.frame( n,  p, peak.time) )
+  }
+} 
+write.csv(datasummary, "datasummary.csv", row.names = FALSE )
+if ( length(grep("slope", names(Alltraces))) > 0){
+  Alltraces$Yslope1 = slope
+}
+
+
+
+
+
+
+
+
+### Get the time of slope an create datasummary.csv
+
+
+
 

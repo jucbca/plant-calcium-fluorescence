@@ -30,12 +30,8 @@ spreadTime <- function() {
   # phase$outside = intensities
   return(phase)
 }
-home = "/Users/nauj/Google Drive/LAB-RESULTS/Root CaSignal/Plot"
-setwd(home)
+home = getwd()
 list.files()
-
-
-savename = "1mMACC"
 
 
 data = read.csv(list.files())
@@ -45,18 +41,33 @@ trace = rbind(BL,trace)
 for(i in 1:nrow(trace)){
   trace$X[i] = i
 }
-ggplot(trace, aes(x = X, y = data)) +
-  geom_line() +
-  ylab ("525/50nm Pixel Intensity") + 
-  xlab ("Seconds") + 
-  ggtitle(savename) +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0 ),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank(),
-        panel.grid.major.x = element_line(),
-        panel.grid.minor.x = element_line())
-ggsave(paste(savename,".jpg",sep = ""))
 
 
+for( n in unique(Alltraces$name) ){
+  trace.plot = dplyr::filter(Alltraces, name==n)
+  
+  savename = unique(trace.plot$name) 
+  
+  ggplot( trace.plot, aes(x = X, y = Yslope1, color = position)) +
+    geom_line() +
+    ylab ("Pixel Intensity slope") + 
+    xlab ("Seconds") + 
+    ggtitle(savename) +
+    theme(axis.text.x = element_text(angle = 0, hjust = 0 ),
+          panel.grid.major.y = element_blank(),
+          panel.grid.minor.y = element_blank(),
+          panel.grid.major.x = element_line(),
+          panel.grid.minor.x = element_line())
+  ggsave(paste(savename,"-slope.pdf",sep = ""))
+  
+}
 
+
+## put all Alltraces into one big dataframe
+trace.compilation = NULL
+for( f in grep(".csv", list.files()) ){
+  print(list.files()[f])
+  trace.load = read.csv(list.files()[f])
+  trace.compilation = rbind(trace.compilation, trace.load)
+}
 
