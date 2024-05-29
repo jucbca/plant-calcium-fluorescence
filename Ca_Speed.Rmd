@@ -35,16 +35,17 @@ calculateslope <- function(vector) {
 
 1.1 Setup some data of the experiment.
 ```{r}
-fecha = 220629  ## Date
+fecha = 210325  ## Date
 planta = "Col0" ## line Col0..."Col0-MZ" "Col0-RH-MZ" "Col0-RH-EZ"
 individual = 1 ## 
-reporter = "Atto514" ## GCaMP3 or GCaMP7c??
+reporter = "MCaMP6s" ## GCaMP3 or "Atto514", "MCaMP6s"
 AA =  "none"  
-dx = 13 # distance between ROIs in mm
+dx = 15 # distance between ROIs in mm
 ```
 
 1.2 Load and plot
-input- traces in .csv format with name indicating basipetal (base) or acropetal (acro). and the leaf is necessary separating with "-". Example "base-L13.csv"
+input- traces in .csv format with name indicating basipetal (base) or acropetal (acro). 
+By default traces are labaled as L13, if necessary to state a different leaf do it like: "...-base-L13.csv"
 ```{r}
 home = getwd()
 list.files()
@@ -63,6 +64,7 @@ for (i in list.files()[grep(".csv", list.files())] ){
   trace.i$date = fecha
   trace.i$plant = planta
   trace.i$reporter = reporter
+  trace.i$leaf = "13"
   names(trace.i)[1] = "X"
   names(trace.i)[2] = "Y"
   if( length(grep("L",i)) != 0 ){
@@ -77,8 +79,8 @@ for (i in list.files()[grep(".csv", list.files())] ){
   ### add to file with all data
   Alltraces = rbind(Alltraces, trace.i)
 }
-head(Alltraces)
-tail(Alltraces)
+# head(Alltraces)
+# tail(Alltraces)
 
 write.csv(Alltraces, file = "Alltraces.csv", row.names = FALSE )    
 ```
@@ -149,7 +151,7 @@ for ( n in unique(datasummary$name) ){
     speed.data = rbind( speed.data, 
                         data.frame("name" = n,
                                    "leaf" = l,
-                                   "speed" = speed) )
+                                   "mm/s" = speed) )
     # plot
     plot <- ggplot( trace.i, aes(X, Y, color = position)) +
       geom_line()  +
@@ -164,9 +166,107 @@ for ( n in unique(datasummary$name) ){
 }
 write.csv(speed.data, "speed.data.csv")
 
-ggplot(speed.data, aes("Col-0",speed)) +
+ggplot(speed.data, aes("Col-0",mm.s)) +
   geom_boxplot() + 
   geom_jitter()
 ggsave( paste( "speeds.pdf",sep = "" ))
+```
+
+4. Curate data manually based on visual inspection of the plots from 3.
+```{r}
+remove = c("470_1","471_1")
+
+traces.filtered = Alltraces[-c(which(Alltraces$name %in% remove)),]
+datasummary = datasummary[-c(which(datasummary$name %in% remove)),]
+speed.data = speed.data[-c(which(speed.data$name %in% remove)),]
+
+write.csv(traces.filtered, "traces.filtered.csv", row.names = FALSE)
+write.csv(datasummary, "datasummary.csv", row.names = FALSE)
+write.csv(speed.data, "speed.data.csv", row.names = FALSE)
+
+ggplot(speed.data, aes("Col-0",mm.s)) +
+  geom_boxplot() + 
+  geom_jitter()
+ggsave( paste( "speeds.pdf",sep = "" ))
+
+```
+
+5. Generate mean ± SEM plot of traces
+input - traces.filtered
+```{r}
+head(Alltraces)
+# put all traces in columns
+time = dplyr::filter(traces.filtered, name == n & position == "basipetal" ) 
+time = time$X[1:301]
+basipetal = data.frame("s" = time)
+acropetal = data.frame("s" = time)
+for (n in unique(traces.filtered$name) ){
+  print(n)
+  plant.n = dplyr::filter(traces.filtered, name == n)
+  # align everything to the peak slope of the basipetal traces.
+  normalize.slope = plant.n %>% dplyr::filter(position == "basipetal") %>% summarize(max(Yslope1))
+  normalize.frame = which(plant.n$Yslope1 == normalize.slope[[1]]) 
+  normalize.time <- plant.n$X[  normalize.frame ]
+  plant.n$X <- (plant.n$X - normalize.time)
+  ## Pick 300 frames of the Y vector and stack
+  basipetal.n = dplyr::filter(plant.n, position == "basipetal")
+  basipetal.n = basipetal.n$Y[ (which(basipetal.n$X==0)-50):(which(basipetal.n$X==0)+250) ]
+  #
+  acropetal.n = dplyr::filter(plant.n, position == "acropetal")
+  acropetal.n = acropetal.n$Y[ (which(acropetal.n$X==0)-50):(which(acropetal.n$X==0)+250) ]
+  # plot(acropetal.n$Y)
+  ## save to collection variables
+  basipetal = cbind( basipetal, basipetal.n )
+  names(basipetal)[ncol(basipetal)] = n
+  acropetal = cbind( acropetal, acropetal.n )
+  names(acropetal)[ncol(acropetal)] = n
+}
+#
+basipetal$mean = rowMeans(basipetal[,2:ncol(basipetal)], na.rm = TRUE)
+basipetal$pSEM = basipetal$mean + 
+      ( apply( basipetal[,2:(ncol(basipetal)-1)], 1, sd, na.rm=TRUE) /
+          rowSums(!is.na(basipetal[,2:(ncol(basipetal)-1)]))  )
+basipetal$nSEM = basipetal$mean - 
+      ( apply( basipetal[,2:(ncol(basipetal)-2)], 1, sd, na.rm=TRUE) /
+          rowSums(!is.na(basipetal[,2:(ncol(basipetal)-2)]))  )
+#
+acropetal$mean = rowMeans(acropetal[,2:ncol(acropetal)], na.rm = TRUE)
+acropetal$pSEM = acropetal$mean + 
+      ( apply( acropetal[,2:(ncol(acropetal)-1)], 1, sd, na.rm=TRUE) /
+          rowSums(!is.na(acropetal[,2:(ncol(acropetal)-1)]))  )
+acropetal$nSEM = acropetal$mean - 
+      ( apply( acropetal[,2:(ncol(acropetal)-2)], 1, sd, na.rm=TRUE) /
+          rowSums(!is.na(acropetal[,2:(ncol(acropetal)-2)]))  )
+#
+basipetal.plot = basipetal[,which(names(basipetal)%in%c("s","mean","pSEM","nSEM")) ] %>% 
+  gather(key = "statistic", value = "pixel.int",2:4)
+basipetal.plot$Position = "basipetal"
+acropetal.plot = acropetal[,which(names(acropetal)%in%c("s","mean","pSEM","nSEM")) ] %>% 
+  gather(key = "statistic", value = "pixel.int",2:4)
+acropetal.plot$Position = "acropetal"
+trace.plot = rbind(basipetal.plot, acropetal.plot)
+
+# Plot mean and SEM
+ggplot(trace.plot, aes(x = s, y=pixel.int, color=Position, lineend=statistic ))+
+    geom_line() +
+    #geom_line(aes(y = pSEM),alpha=0.5,color="blue") +
+    #geom_line(aes(y = nSEM),alpha=0.5,color="blue") +
+    ylab ("Pixel intensity [A.U.]") + 
+    xlab ("Time (s)") + 
+    ggtitle( paste("GCaMP6 fluorescence. n=",ncol(basipetal)-4," mean±SEM", sep = "") ) +
+    theme(
+      axis.text.x = element_text(color = "black", size = 20, angle = 0, hjust = 0.5, vjust = 0, face = "plain"),
+      axis.text.y = element_text(color = "black", size = 20, angle = 0, hjust = 0 , vjust = 0.5, face = "plain"),
+      axis.title.x = element_text(color = "black", size = 25, angle = 0, hjust = 0.5, vjust = 0, face = "plain"), #element_blank(), #element_text(color = "black", size = 30, angle = 0, hjust = 0.5, vjust = 0, face = "plain"), #
+      axis.title.y = element_text(color = "black", size = 25, angle = 90, hjust = 0.5, vjust = 1, face = "plain"),
+      plot.title = element_text(color = "black", size = 30, angle = 0, hjust = 0.5, vjust = 0, face = "plain"), # element_blank(), 
+      legend.text = element_text(size = 20),
+      legend.title = element_text(hjust = 0.1, size = 20),
+      panel.grid.major.y = element_line(), # element_blank()
+      panel.grid.minor.y = element_line(),
+      panel.grid.major.x = element_line(), #element_line()
+      panel.grid.minor.x = element_blank()) 
+ggsave("Pixel.intensity-Mean±SEM.pdf")
+
 ```
 
