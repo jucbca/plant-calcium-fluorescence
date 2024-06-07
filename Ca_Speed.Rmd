@@ -99,31 +99,84 @@ for( n in unique(Alltraces$name) ){
       trace.i = dplyr::filter(Alltraces, name==n, position==p, leaf==l) 
       print(paste(n,p,l))
       
+      # determine baseline
+      #plot(trace.i$Y, type="l") + abline(v=100)
+      baseline = mean(trace.i$Y[1:100])
       # find slope
       slope.i = calculateslope( trace.i$Y )
       slope = append(slope, slope.i)
+      peak.slope = max(slope.i) # save
       
       # find time of Peak slope index and time
-      peak.index = which(slope.i==max(slope.i))
+      peak.slope.index = which(slope.i==max(slope.i)) 
+      peak.slope.time = trace.i$X[peak.slope.index]# save
+      
+      # find peak amplitude
+      peak.amplitude = max(trace.i$Y[1:250])-baseline # save
+      peak.amplitude.index = which(trace.i$Y == peak.amplitude+baseline ) 
+      peak.amplitude.time = trace.i$X[peak.amplitude.index]# save
+      
+      # find half max (+ frame)
+      halfmax.amplitude = round( peak.amplitude/2 ,2)
+      halfmax.frame = which( abs( trace.i$Y[1:(peak.amplitude.index)] - halfmax.amplitude ) == min( abs( trace.i$Y[1:(peak.amplitude.index)] - halfmax.amplitude ) ) ) 
+      halfmax.time = trace.i$X[halfmax.frame] # save
+      
+      # find half max of repol (frame)
+      repol.halfmax.frame = which( abs( trace.i$Y[(peak.amplitude.index+5):nrow(trace.i)] - halfmax.amplitude ) == min( abs( trace.i$Y[(peak.amplitude.index+5):nrow(trace.i)] - halfmax.amplitude ) ) ) + peak.amplitude.index+5
+      repol.halfmax.time = trace.i$X[repol.halfmax.frame] # save
+      
+
+      #plot( trace.i$Y ) + abline(v=repol.halfmax.frame)
+      
+      # Calculate and save duration
+      duration = repol.halfmax.time - halfmax.time # save
+      
+      
+      
+      
+      # plot
       title = paste( trace.i[1,3:ncol(trace.i)], sep = " ", collapse = " " ) 
       plot(slope.i, type = "l", main=title )+
-        abline(v = peak.index, col = "red")
-      peak.time = trace.i$X[peak.index]
+        abline(v = peak.slope.index, col = "red")
+      
       plot(trace.i$X, trace.i$Y, main=title )+
-        abline(v = peak.time, col = "red")
-      datasummary = rbind(datasummary, data.frame( n,  p, l, peak.time, dx) )
+        abline(v = peak.slope.time, col = "red")
+      datasummary = rbind(datasummary, data.frame( n,
+                                                   p,
+                                                   l,
+                                                   "peak.slope"=peak.slope,
+                                                   "peak.slope.time"=peak.slope.time,
+                                                   "peak.amplitude"=peak.amplitude,
+                                                   "peak.amplitude.time"=peak.amplitude.time,
+                                                   "halfmax.time"=halfmax.time,
+                                                   "repol.halfmax.time"=repol.halfmax.time,
+                                                   "duration"=duration,
+                                                   dx) )
     }
   }
 } 
-names(datasummary) = c("name","position","leaf","peak.time","dx")
 if ( length(grep("slope", names(Alltraces))) == 0){
   Alltraces$Yslope1 = slope
 }
 write.csv(datasummary, "datasummary.csv", row.names = FALSE )
 write.csv(Alltraces, file = "Alltraces.csv", row.names = FALSE )
 ```
+2.1 Make boxplots with the data calculated in 2. 
+```{r}
+parameters = c("peak.slope", "peak.slope.time", "peak.amplitude", "peak.amplitude.time", "halfmax.time", "repol.halfmax.time", "duration")
+for( r in which(names(datasummary)%in%parameters) ){
+  ggplot(datasummary,aes(p, datasummary[,r])) +
+  geom_boxplot() +
+  geom_jitter() +
+  ggtitle( names(datasummary[r]) )
+  ggsave(paste("Boxplot-",names(datasummary[r]),".pdf",sep = ""))
+}
 
-3. Calculate an plot speeds of the Ca wave. Use peak slope for this.
+```
+
+
+
+3. Calculate and plot speeds of the Ca wave. Use peak slope for this.
 OPTIONAL! give a different distance to each experiment. Ideally it's always the same!
 ```{r}
 datasummary$dx = 0
