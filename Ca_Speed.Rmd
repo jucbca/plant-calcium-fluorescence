@@ -15,7 +15,7 @@ library(tidyr)
 normalizeToBaseline <- function(trace, bl.time = 90){
   bl.trace = trace$Y[1:which(abs(trace$X-bl.time) ==  min(abs(trace$X-bl.time ))) ]
   bl = round(mean(bl.trace,2))
-  trace$Y = trace$Y - bl
+  trace$Y = trace$Y / bl
   return(trace)
   ## Get slope for each trace. 
 }
@@ -45,7 +45,7 @@ dx = 15 # distance between ROIs in mm
 
 1.2 Load and plot
 input- traces in .csv format with name indicating basipetal (base) or acropetal (acro). 
-By default traces are labaled as L13, if necessary to state a different leaf do it like: "...-base-L13.csv"
+By default traces are labeled as L13, if necessary to state a different leaf do it like: "...-base-L13.csv"
 ```{r}
 home = getwd()
 list.files()
@@ -73,8 +73,8 @@ for (i in list.files()[grep(".csv", list.files())] ){
   trace.i <- normalizeToBaseline(trace.i)
   
   ### plot traces  ###
-  title = paste( trace.i[1,3:ncol(trace.i)], sep = " ", collapse = " " ) 
-  plot(x = trace.i$X, y = trace.i$Y, type = "l", main=title)
+  # title = paste( trace.i[1,3:ncol(trace.i)], sep = " ", collapse = " " ) 
+  # plot(x = trace.i$X, y = trace.i$Y, type = "l", main=title)
   #readline (prompt="Press [enter] to save")
   ### add to file with all data
   Alltraces = rbind(Alltraces, trace.i)
@@ -83,6 +83,14 @@ for (i in list.files()[grep(".csv", list.files())] ){
 # tail(Alltraces)
 
 write.csv(Alltraces, file = "Alltraces.csv", row.names = FALSE )    
+
+# plot and save per plant
+for( n in unique(Alltraces$name)){
+  trace.plot = dplyr::filter(Alltraces, name == n)
+  ggplot(trace.plot, aes(X, Y, color = position))+
+    geom_line()
+  ggsave(paste(n,"_plot.pdf", sep = ""))
+}
 ```
 
 2. calculate, plot and save slope traces.
@@ -115,7 +123,7 @@ for( n in unique(Alltraces$name) ){
       peak.amplitude = max(trace.i$Y[1:250])-baseline # save
       peak.amplitude.index = which(trace.i$Y == peak.amplitude+baseline ) 
       peak.amplitude.time = trace.i$X[peak.amplitude.index]# save
-      
+
       # find half max (+ frame)
       halfmax.amplitude = round( peak.amplitude/2 ,2)
       halfmax.frame = which( abs( trace.i$Y[1:(peak.amplitude.index)] - halfmax.amplitude ) == min( abs( trace.i$Y[1:(peak.amplitude.index)] - halfmax.amplitude ) ) ) 
@@ -164,6 +172,8 @@ write.csv(Alltraces, file = "Alltraces.csv", row.names = FALSE )
 2.1 Make boxplots with the data calculated in 2. 
 ```{r}
 parameters = c("peak.slope", "peak.slope.time", "peak.amplitude", "peak.amplitude.time", "halfmax.time", "repol.halfmax.time", "duration")
+
+datasummary_normalized = datasummary
 for( r in which(names(datasummary)%in%parameters) ){
   ggplot(datasummary,aes(p, datasummary[,r])) +
   geom_boxplot() +
@@ -186,7 +196,7 @@ datasummary$dx[which(datasummary$name==5)] = 7
 ```
 
 input - datasummary.csv
-output - plots and datastats.csv
+output - speed plots and datastats.csv
 ```{r}
 speed.data = NULL
 for ( n in unique(datasummary$name) ){
@@ -227,15 +237,15 @@ ggsave( paste( "speeds.pdf",sep = "" ))
 
 4. Curate data manually based on visual inspection of the plots from 3.
 ```{r}
-remove = c("470_1","471_1")
+remove = c("5_485","070_2","6_070","9_477","20_468","477_6","3_477","471_1", "5_485","6_070"  ) # removed: 
 
 traces.filtered = Alltraces[-c(which(Alltraces$name %in% remove)),]
-datasummary = datasummary[-c(which(datasummary$name %in% remove)),]
-speed.data = speed.data[-c(which(speed.data$name %in% remove)),]
+datasummary = datasummary[-c(which(datasummary$n %in% remove)),]
+#speed.data = speed.data[-c(which(speed.data$name %in% remove)),]
 
 write.csv(traces.filtered, "traces.filtered.csv", row.names = FALSE)
 write.csv(datasummary, "datasummary.csv", row.names = FALSE)
-write.csv(speed.data, "speed.data.csv", row.names = FALSE)
+#write.csv(speed.data, "speed.data.csv", row.names = FALSE)
 
 ggplot(speed.data, aes("Col-0",mm.s)) +
   geom_boxplot() + 
@@ -247,9 +257,9 @@ ggsave( paste( "speeds.pdf",sep = "" ))
 5. Generate mean ± SEM plot of traces
 input - traces.filtered
 ```{r}
-head(Alltraces)
+#head(Alltraces)
 # put all traces in columns
-time = dplyr::filter(traces.filtered, name == n & position == "basipetal" ) 
+time = dplyr::filter(traces.filtered, name == unique(traces.filtered$name)[1] & position == "basipetal" ) 
 time = time$X[1:301]
 basipetal = data.frame("s" = time)
 acropetal = data.frame("s" = time)
